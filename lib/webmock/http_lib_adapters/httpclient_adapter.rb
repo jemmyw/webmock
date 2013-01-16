@@ -44,8 +44,7 @@ if defined?(::HTTPClient)
 
       WebMock::RequestRegistry.instance.requested_signatures.put(request_signature)
 
-      if webmock_responses[request_signature]
-        webmock_response = webmock_responses.delete(request_signature)
+      if webmock_response = WebMock::StubRegistry.instance.response_for_request(request_signature)
         response = build_httpclient_response(webmock_response, stream, &block)
         @request_filter.each do |filter|
           filter.filter_response(req, response)
@@ -55,9 +54,6 @@ if defined?(::HTTPClient)
           {:lib => :httpclient}, request_signature, webmock_response)
         res
       elsif WebMock.net_connect_allowed?(request_signature.uri)
-        # in case there is a nil entry in the hash...
-        webmock_responses.delete(request_signature)
-
         res = if stream
           do_get_stream_without_webmock(req, proxy, conn, &block)
         else
@@ -82,7 +78,7 @@ if defined?(::HTTPClient)
       request_signature = build_request_signature(req)
       webmock_request_signatures << request_signature
 
-      if webmock_responses[request_signature] || WebMock.net_connect_allowed?(request_signature.uri)
+      if WebMock::StubRegistry.instance.response_for_request(request_signature) || WebMock.net_connect_allowed?(request_signature.uri)
         super
       else
         raise WebMock::NetConnectNotAllowedError.new(request_signature)
@@ -169,12 +165,6 @@ if defined?(::HTTPClient)
     end
 
     signature
-  end
-
-  def webmock_responses
-    @webmock_responses ||= Hash.new do |hash, request_signature|
-      hash[request_signature] = WebMock::StubRegistry.instance.response_for_request(request_signature)
-    end
   end
 
   def webmock_request_signatures
